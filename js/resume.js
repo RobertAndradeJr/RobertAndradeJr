@@ -25,4 +25,12 @@
     target: '#sideNav'
   });
 
+  $('i').mouseenter(function() {
+    $(this).addClass('colored');
+  });
+  
+  $('i').mouseleave(function() {
+    $(this).removeClass('colored');
+  });
+
 })(jQuery); // End of use strict
