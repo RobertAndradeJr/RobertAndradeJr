@@ -1,18 +1,18 @@
-var gulp = require("gulp");
+var { src, dest, series, task, watch } = require("gulp");
 var sass = require("gulp-sass");
 var header = require("gulp-header");
 var cleanCSS = require("gulp-clean-css");
 var rename = require("gulp-rename");
 var uglify = require("gulp-uglify");
-var pkg = require("./package.json");
-const { easing } = require("jquery");
+var {author, homepage, license,name, title, version } = require("./package.json");
 var browserSync = require("browser-sync").create();
 
 const paths = {
   src: {
-    scss: "scss/*.scss",
+    scss: "./scss/**/*.scss",
     js: "js/*.js",
     html: "*.html",
+    css: ["./css/*.css", "!./css/*.min.css"],
     bootStrap: [
       "./node_modules/bootstrap/dist/**/*",
       "!./node_modules/bootstrap/dist/css/bootstrap-grid*",
@@ -43,6 +43,7 @@ const paths = {
     simpleLineCSS: ["./node_modules/simple-line-icons/css/**"],
   },
   dest: {
+    css: "./css",
     bootStrap: "./vendor/bootstrap",
     devIcons: "./vendor/devicons",
     fontAwesome: "./vendor/font-awesome",
@@ -56,47 +57,42 @@ const paths = {
 // Set the banner content
 var banner = [
   "/*!\n",
-  " * Start Bootstrap - <%= pkg.title %> v<%= pkg.version %> (<%= pkg.homepage %>)\n",
+  ` * Start Bootstrap - ${title} v${version}(${homepage})\n`,
   " * Copyright 2013-" + new Date().getFullYear(),
-  " <%= pkg.author %>\n",
-  " * Licensed under <%= pkg.license %> (https://github.com/BlackrockDigital/<%= pkg.name %>/blob/master/LICENSE)\n",
+  ` ${author}\n`,
+  ` * Licensed under ${license} (https://github.com/BlackrockDigital/${name}/blob/master/LICENSE)\n`,
   " */\n",
   "",
 ].join("");
 
+// Copy third party libraries from /node_modules into /vendor
 const vendor = (done) => {
   // Bootstrap
-  gulp.src(paths.src.bootStrap).pipe(gulp.dest(paths.dest.bootStrap));
+  src(paths.src.bootStrap).pipe(dest(paths.dest.bootStrap));
 
   // Devicons
-  gulp.src(paths.src.devIcons).pipe(gulp.dest(paths.dest.devIcons));
+  src(paths.src.devIcons).pipe(dest(paths.dest.devIcons));
 
   // Font Awesome
-  gulp.src(paths.src.fontAwesome).pipe(gulp.dest(paths.dest.fontAwesome));
+  src(paths.src.fontAwesome).pipe(dest(paths.dest.fontAwesome));
 
   // jQuery
-  gulp.src(paths.src.jQuery).pipe(gulp.dest(paths.dest.jQuery));
+  src(paths.src.jQuery).pipe(dest(paths.dest.jQuery));
 
   // jQuery Easing
-  gulp.src(paths.src.easing).pipe(gulp.dest(paths.dest.easing));
+  src(paths.src.easing).pipe(dest(paths.dest.easing));
 
   // Simple Line Icons
-  gulp
-    .src(paths.src.simpleLineFonts)
-    .pipe(gulp.dest(paths.dest.simpleLineFonts));
+  src(paths.src.simpleLineFonts).pipe(dest(paths.dest.simpleLineFonts));
 
-  gulp.src(paths.src.simpleLineCSS).pipe(gulp.dest(paths.dest.simpleLineCSS));
+  src(paths.src.simpleLineCSS).pipe(dest(paths.dest.simpleLineCSS));
 
   return done();
 };
 
-// Copy third party libraries from /node_modules into /vendor
-gulp.task("vendor", vendor);
-
 // Compile SCSS
-gulp.task("css:compile", function () {
-  return gulp
-    .src("./scss/**/*.scss")
+const compileCSS = () =>
+  src(paths.src.scss)
     .pipe(
       sass
         .sync({
@@ -104,49 +100,47 @@ gulp.task("css:compile", function () {
         })
         .on("error", sass.logError)
     )
-    .pipe(gulp.dest("./css"));
-});
+    .pipe(dest(paths.dest.css));
 
 // Minify CSS
-gulp.task(
-  "css:minify",
-  gulp.series("css:compile", function () {
-    return gulp
-      .src(["./css/*.css", "!./css/*.min.css"])
-      .pipe(cleanCSS())
-      .pipe(
-        rename({
-          suffix: ".min",
-        })
-      )
-      .pipe(gulp.dest("./css"))
-      .pipe(browserSync.stream());
-  })
-);
-
-// CSS
-gulp.task("css", gulp.series("css:compile", "css:minify"));
-
-// Minify JavaScript
-gulp.task("js:minify", function () {
-  return gulp
-    .src(["./js/*.js", "!./js/*.min.js"])
-    .pipe(uglify())
+const minifyCSS = () =>
+  src(paths.src.css)
+    .pipe(cleanCSS())
     .pipe(
       rename({
         suffix: ".min",
       })
     )
-    .pipe(gulp.dest("./js"))
+    .pipe(dest(paths.dest.css))
     .pipe(browserSync.stream());
-});
 
-// JS
-gulp.task("js", gulp.series("js:minify"));
+// Minify JavaScript
+const minifyJs = () =>
+  src(["./js/*.js", "!./js/*.min.js"])
+    .pipe(uglify())
+    .pipe(header(banner))
+    .pipe(
+      rename({
+        suffix: ".min",
+      })
+    )
+    .pipe(dest("./js"))
+    .pipe(browserSync.stream());
 
-// Default task
-gulp.task("default", gulp.series("css", "js", "vendor"));
+// reload browser when changes detected
+const reloadBSync = (done) => {
+  browserSync.reload();
+  return done();
+};
 
+// watch for changes
+const gulpWatch = () =>
+  watch(
+    [paths.src.scss, paths.src.js, paths.src.html],
+    series("css", "js", reloadBSync)
+  );
+
+// Configure the browserSync task
 const bSync = (done) => {
   browserSync.init({
     server: {
@@ -156,21 +150,22 @@ const bSync = (done) => {
   return done();
 };
 
-// Configure the browserSync task
-gulp.task("browserSync", bSync);
+// CSS tasks
+task("css:compile", compileCSS);
+task("css:minify", series("css:compile", minifyCSS));
+task("css", series("css:compile", "css:minify"));
 
-const reloadBSync = (done) => {
-  browserSync.reload();
-  return done();
-};
+// JS tasks
+task("js:minify", minifyJs);
+task("js", series("js:minify"));
+task("vendor", vendor);
 
-const gulpWatch = () =>
-  gulp.watch(
-    [paths.src.scss, paths.src.js, paths.src.html],
-    gulp.series("css", "js", reloadBSync)
-  );
+// Default task
+task("default", series("css", "js", "vendor"));
+task("browserSync", bSync);
 
-gulp.task("watch", gulpWatch);
+// Watch task
+task("watch", gulpWatch);
 
 // Dev task
-gulp.task("dev", gulp.series("css", "js", "vendor", "browserSync", "watch"));
+task("dev", series("css", "js", "vendor", "browserSync", "watch"));
